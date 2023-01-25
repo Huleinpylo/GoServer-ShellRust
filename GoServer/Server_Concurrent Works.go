@@ -15,7 +15,7 @@ import (
 	"github.com/fatih/color"
 )
 
-const FILEREADBUFFSIZE = 512
+const FILEREADBUFFSIZE = 524288
 const MIN = 1
 const MAX = 100
 
@@ -71,10 +71,17 @@ func getFilewithNameandSize(connection net.Conn, command string) {
 func handleConnection(c net.Conn) {
 	fmt.Printf("Serving %s\n", c.RemoteAddr().String())
 	for {
+		id_client, err := c.Read(recvdcmd[0:])
+		if err != nil {
+			return
+		}
+		redc.Print(string(recvdcmd[0:id_client]))
+
 		path, err := c.Read(recvdcmd[0:])
 		if err != nil {
 			return
 		}
+		blackc.Print("--")
 		cyanc.Print(string(recvdcmd[0:path]))
 		cyanc.Print(">")
 		reader := bufio.NewReader(os.Stdin)
@@ -97,6 +104,9 @@ func handleConnection(c net.Conn) {
 
 		} else {
 			c.Write([]byte(command))
+			chunkbytes, _ := c.Read(recvdcmd[0:])
+			greenc.Println(string(recvdcmd[0:chunkbytes]))
+
 			for {
 				chunkbytes, _ := c.Read(recvdcmd[0:])
 				//fmt.Println(string(recvdcmd[0:n]))
@@ -110,11 +120,6 @@ func handleConnection(c net.Conn) {
 
 				}
 			}
-			path, err := c.Read(recvdcmd[0:])
-			if err != nil {
-				return
-			}
-			blackc.Print(string(recvdcmd[0:path]) + "\n")
 
 		}
 
