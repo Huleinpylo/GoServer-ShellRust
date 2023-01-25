@@ -1,11 +1,15 @@
 [package]
-name = "rust-client"
+name = "Client-Rust-noTLS"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-openssl = { version = "0.10.38", features = ["vendored"] }
-openssl-sys = "0.9.80"
-winapi = { version = "0.3.9", features = ["processthreadsapi", "winnt", "winbase", "securitybaseapi"] }
+tokio = { version = "1.17.0", features = ["full"] }
+native-tls = { version = "0.2.11" }
+clipboard = {version="0.5.0"}
+winapi = {version = "0.3.9", features =["processthreadsapi","winnt","winbase","securitybaseapi","memoryapi"]}
+rand={version="0.8.5"}
+win-screenshot={version="2.0.0"}
+gethostname = "0.4.1"
